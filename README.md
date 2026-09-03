@@ -2,30 +2,24 @@
 
 This repository provides the files for the Jane Street ASIC reverse-engineering puzzle! See the [blog post](https://blog.janestreet.com/can-you-reverse-engineer-an-asic/) for more details.
 
+### Solution Summarized
+- Extracted the netlist from `puzzle.gds` using Magic + the OpenLane container, via `work/tools/extract.tcl`, producing `work/build/puzzle.spice`
+- Wrote a SPICE-to-Verilog converter in C, `work/tools/spice_convert_to_v.c`, producing `work/build/puzzle.v`
+- Wrote a netlist/cell parser and validated it against `iverilog`: `work/tools/netlist.c`, `work/tools/cells.c`, `work/tools/validate_cells.c`
+- Built and debugged a gate-level simulator to inspect the chip's output: `work/tools/sim.c`
+- Added the final solve scripts — fan-in cone tracing, VCD decoding, SMT encoding, and the answer/testbench pipeline: `work/tools/cone.c`, `work/tools/dcone.c`, `work/tools/vcd_decode.c`, `work/tools/solve.c`, `work/tools/extract_bits.py`, `work/tools/mktb.py`, `work/tools/run_solve.sh`
+
 ### Puzzle GDS
 
-The puzzle GDS is in this repository, in the file named `puzzle.gds`. You can preview it using [KLayout](https://www.klayout.de/) or the [TinyTapeout Online GDS Viewer](https://gds-viewer.tinytapeout.com/).
+The puzzle GDS is in this repository, in the file named `work/puzzle.gds or puzzle_given.gds`. You can preview it using [KLayout](https://www.klayout.de/) or the [TinyTapeout Online GDS Viewer](https://gds-viewer.tinytapeout.com/).
 
 See `example_inputs.vcd` which shows some inputs being fed to the design (unfortunately, not the correct inputs to make `success` go high!). You can view it using [Surfer](https://surfer-project.org/) or a similar tool.
 
-To help you get started, below is an image with some hints. The region labelled as "output generator" is safe to ignore during your initial reverse-engineering steps, but you'll need to simulate it to get your final answer!
+To help me get started, below is the image given with some hints. The region labelled as "output generator" is safe to ignore during your initial reverse-engineering steps, but you'll need to simulate it to get your final answer!
 
 ![](layout.png)
 
-### Warm-up Puzzle
-
-To familiarize yourself with the flow and help develop your tools, we've put together a small example design and run it through a very similar flow to the one used for the real thing! The example design consists of two shift registers, an adder, and a comparator, outputting success if `A + B == 496`.
-
-You'll find the following files related to the warm-up puzzle:
-
-- `warmup/00_source.v`: The original Verilog source code of the example design
-- `warmup/01_netlist.v`: Synthesized netlist comprising of a list of standard cells
-  and connections
-- `warmup/02_netlist_with_power_rails.v`: Netlist with VDD and GND rails added
-- `warmup/03_post_place_and_route.def`: Physical layout of cells and routing
-  connections, corresponding to cell and net names.
-- `warmup/04_final.gds`: The final manufacturable layout file, with many internal names
-  removed
+Thanks for this oppurtunity!
 
 
-testing to see if commit works
+
