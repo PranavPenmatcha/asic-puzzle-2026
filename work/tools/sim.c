@@ -14,7 +14,6 @@ typedef unsigned long long u64;
 #define NCT  128
 #define NNETV 4096
 
-/* ---------- netlist parsing (same as tools/netlist.c) ---------- */
 
 typedef struct { char pin[NM]; char net[NM]; } Conn;
 typedef struct { char type[NM]; char name[NM]; Conn c[NCON]; int nc; } Inst;
@@ -101,7 +100,6 @@ static int isoutpin(const char *p) {
 static int isseq(const char *type) { return strstr(type, "__df") != NULL; }
 static int isconst(const char *type) { return strstr(type, "conb_1") != NULL; }
 
-/* ---------- liberty parsing (same as tools/cells.c) ---------- */
 
 typedef struct { char name[NM]; char pin[NPIN][NM]; char func[NPIN][NF]; int np; int out; } LCell;
 static LCell lc[NCT]; static int nlc = 0;
@@ -147,8 +145,6 @@ static void parseliberty(char *text) {
 }
 static LCell *findlc(const char *name) { for (int i = 0; i < nlc; i++) if (!strcmp(lc[i].name, name)) return &lc[i]; return NULL; }
 
-/* ---------- word-parallel (u64) boolean evaluator ---------- */
-
 static const char *ep;
 static char evnames[NPIN][NM]; static u64 evvals[NPIN]; static int nev;
 static u64 lookup(const char *name) {
@@ -180,9 +176,6 @@ static u64 evalfunc(const char *expr, char names[][NM], u64 vals[], int n) {
     nev = n;
     return eval_or();
 }
-
-/* ---------- net value table + levelization ---------- */
-
 static char netname[NNETV][NM]; static u64 netval[NNETV]; static int ready[NNETV]; static int nnetv = 0;
 static int findnet(const char *n) { for (int i = 0; i < nnetv; i++) if (!strcmp(netname[i], n)) return i; return -1; }
 static int getnet(const char *n) {
@@ -194,10 +187,6 @@ static int getnet(const char *n) {
 
 static int levelorder[NINS]; static int nlevel = 0;
 
-/* topological order over the combinational (non-flop, non-const) instances,
- * by repeated passes: an instance is placeable once every one of its
- * non-output pins' nets is already "ready" (driven). O(n^2) but n~630, and
- * this is a one-shot setup cost, not per-cycle -- simplicity over speed. */
 static void levelize(void) {
     for (int i = 0; i < nports; i++) if (!strcmp(dir[i], "input")) ready[getnet(ports[i])] = 1;
     for (int i = 0; i < nin; i++)
@@ -226,9 +215,6 @@ static void levelize(void) {
     fprintf(stderr, "levelized %d of %d combinational cells\n", nlevel, ncomb);
     if (nlevel != ncomb) { fprintf(stderr, "levelize incomplete -- cycle in combinational logic?\n"); exit(1); }
 }
-
-/* ---------- one clock edge ---------- */
-
 static void evalcomb(void) {
     for (int idx = 0; idx < nlevel; idx++) {
         Inst *x = &ins[levelorder[idx]];
@@ -249,8 +235,6 @@ static void evalcomb(void) {
 
 static const u64 ALL1 = ~(u64)0;
 
-/* advances every flop one clock edge, using the pre-edge net values that
- * evalcomb() just computed for D/RESET_B/SET_B */
 static void step(void) {
     evalcomb();
     static int first = 1;
@@ -287,10 +271,8 @@ static void resetpulse(int cycles) {
     setinput("rst_n", ALL1);
 }
 
-/* ---------- main: parse everything, run a basic sanity sequence ---------- */
-
 int main(int argc, char **argv) {
-    if (argc < 4) { fprintf(stderr, "usage: %s puzzle.v lib.lib celltypes.txt\n", argv[0]); return 1; }
+    if (argc < 4) { fprintf(stderr, "usage: %s puzzle.v lib.lib celltypes.txt [121bits.txt]\n", argv[0]); return 1; }
 
     sl(rd(argv[1]));
     parseports();
@@ -303,19 +285,32 @@ int main(int argc, char **argv) {
     parseliberty(rd(argv[2]));
 
     /* conb_1 outputs are compile-time constants, not liberty-evaluated */
-    for (int i = 0; i < nin; i++) if (isconst(ins[i].type))
-        for (int k = 0; k < ins[i].nc; k++)
+    for (int i = 0; i < nin; i++) {
+        if (!isconst(ins[i].type)) continue;
+        for (int k = 0; k < ins[i].nc; k++) {
             if (!strcmp(ins[i].c[k].pin, "HI")) netval[getnet(ins[i].c[k].net)] = ALL1;
             else if (!strcmp(ins[i].c[k].pin, "LO")) netval[getnet(ins[i].c[k].net)] = 0;
+        }
+    }
 
     levelize();
 
-    /* sanity sequence, same shape as sim/testbench.v from step 3 */
     resetpulse(3);
     setinput("enable", 0); setinput("I", 0);
     setinput("enable", ALL1);
-    u64 iv = 0;
-    for (int i = 0; i < 40; i++) { iv = ~iv; setinput("I", iv); step(); }
+
+    if (argc >= 5) {
+        /* replay a real 121-bit input (one char '0'/'1' per cycle) */
+        char *bits = rd(argv[4]);
+        for (int i = 0; bits[i] == '0' || bits[i] == '1'; i++) {
+            setinput("I", bits[i] == '1' ? ALL1 : 0);
+            step();
+        }
+        step(); 
+    } else {
+       u64 iv = 0;
+        for (int i = 0; i < 40; i++) { iv = ~iv; setinput("I", iv); step(); }
+    }
 
     printf("success=%llu O[7:0]=", (unsigned long long)(getval("success") & 1));
     for (int b = 7; b >= 0; b--) {
